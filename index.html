@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bible Runner</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome para ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* Aplica o bloqueio de toques exclusivamente aos controlos de jogabilidade ativa */
+        #game-container, #joystick-container, #mobile-controls {
+            touch-action: none;
+        }
+        .title-font {
+            font-family: 'Fredoka One', cursive;
+        }
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        #joystick-knob {
+            transition: transform 0.05s ease-out;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="bg-indigo-950 text-white overflow-hidden w-full h-screen relative">
+
+    <!-- CANVAS DO JOGO 3D -->
+    <div id="game-container" class="absolute inset-0 w-full h-full z-0"></div>
+
+    <!-- NOME DO MAPA NO TOPO -->
+    <div id="map-title-banner" class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/60 backdrop-blur-md px-8 py-2 rounded-full border border-white/20 z-10 hidden text-center shadow-lg">
+        <p class="text-[10px] text-yellow-400 font-bold uppercase tracking-widest">Local Atual</p>
+        <h2 id="map-title-text" class="text-sm md:text-base font-black text-white title-font whitespace-nowrap">Jardim do Éden</h2>
+    </div>
+
+    <!-- VISUAL DA CONTAGEM DECRESCENTE -->
+    <div id="countdown-overlay" class="absolute inset-0 flex items-center justify-center z-30 hidden pointer-events-none">
+        <h1 id="countdown-text" class="text-8xl md:text-9xl font-black title-font text-yellow-400 drop-shadow-[0_6px_12px_rgba(0,0,0,0.6)] animate-pulse">3</h1>
+    </div>
+
+    <!-- HUD DO JOGO (Durante a Partida) -->
+    <div id="hud" class="absolute inset-x-0 top-0 p-4 flex justify-between items-start pointer-events-none z-10 hidden mt-14">
+        <!-- Posição e Competidores -->
+        <div class="bg-black/60 backdrop-blur-md rounded-2xl p-4 flex items-center gap-3 border border-white/10 shadow-lg">
+            <div class="bg-amber-500 text-white text-2xl px-3 py-1 rounded-xl title-font shadow-inner" id="hud-position">
+                11º
+            </div>
+            <div>
+                <p class="text-xs text-indigo-200 font-bold uppercase tracking-wider">Classificação</p>
+                <p class="text-sm font-bold text-white" id="hud-runners-count">11 Corredores Ativos</p>
+            </div>
+        </div>
+
+        <!-- Indicador de Super Salto e Checkpoint -->
+        <div class="flex flex-col gap-2 items-end">
+            <!-- Indicador de Checkpoint Ativo -->
+            <div class="bg-black/60 backdrop-blur-md rounded-2xl p-3 flex flex-col items-center border border-white/10 shadow-lg min-w-[150px]">
+                <p class="text-xs text-indigo-200 font-bold uppercase tracking-wider mb-1">Teu Checkpoint</p>
+                <div class="flex items-center gap-2">
+                    <span id="checkpoint-indicator-dot" class="w-4 h-4 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]"></span>
+                    <span id="checkpoint-indicator-text" class="text-xs font-bold text-red-400">Nenhum Guardado</span>
+                </div>
+            </div>
+
+            <!-- Recarga do Super Salto -->
+            <div class="bg-black/60 backdrop-blur-md rounded-xl p-2.5 flex items-center gap-2 border border-white/10 shadow-lg">
+                <span class="text-xs font-bold text-yellow-300 uppercase">SUPER SALTO:</span>
+                <div class="w-20 bg-indigo-950 h-3 rounded-full overflow-hidden border border-white/20">
+                    <div id="super-jump-bar" class="bg-gradient-to-r from-yellow-300 to-amber-500 h-full w-full transition-all duration-100"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MENU PRINCIPAL -->
+    <div id="menu-screen" class="absolute inset-0 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-indigo-950 via-purple-900 to-indigo-950 z-20">
+        <div class="max-w-md w-full text-center space-y-6 floating">
+            <div>
+                <h1 class="text-6xl md:text-7xl text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 title-font drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)] leading-tight">
+                    BIBLE RUNNER
+                </h1>
+                <p class="text-amber-300 font-bold tracking-widest text-sm uppercase mt-1">Corre, Salta e Aprende!</p>
+            </div>
+
+            <!-- Configuração do Nome e Cor -->
+            <div class="bg-white/10 backdrop-blur-md p-5 rounded-3xl border border-white/20 space-y-4 shadow-2xl">
+                <!-- Nome do Jogador -->
+                <div class="space-y-2 text-left">
+                    <label for="player-name-input" class="text-sm font-bold text-indigo-200 block">Escreve o teu Nome:</label>
+                    <input type="text" id="player-name-input" maxlength="12" placeholder="Teu nome aqui..." class="w-full px-4 py-3 rounded-xl bg-indigo-950/80 border-2 border-indigo-500/50 text-white font-bold focus:outline-none focus:border-yellow-400 transition text-center shadow-inner">
+                </div>
+
+                <!-- Cor do Boneco -->
+                <div class="space-y-2">
+                    <h3 class="text-sm font-bold text-indigo-200">Escolhe a cor do teu boneco:</h3>
+                    <div class="flex justify-center gap-3" id="color-selector">
+                        <button class="color-btn w-10 h-10 rounded-full bg-blue-500 border-4 border-transparent shadow-lg cursor-pointer transform transition" data-color="#3b82f6"></button>
+                        <button class="color-btn w-10 h-10 rounded-full bg-emerald-500 border-4 border-transparent shadow-lg cursor-pointer transform transition" data-color="#10b981"></button>
+                        <button class="color-btn w-10 h-10 rounded-full bg-rose-500 border-4 border-transparent shadow-lg cursor-pointer transform transition" data-color="#f43f5e"></button>
+                        <button class="color-btn w-10 h-10 rounded-full bg-amber-500 border-4 border-transparent shadow-lg cursor-pointer transform transition" data-color="#f59e0b"></button>
+                        <button class="color-btn w-10 h-10 rounded-full bg-purple-500 border-4 border-transparent shadow-lg cursor-pointer transform transition" data-color="#a855f7"></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Instruções -->
+            <div class="text-xs text-indigo-200/80 bg-black/30 p-4 rounded-xl text-left space-y-1 border border-white/5">
+                <p class="font-bold text-center text-indigo-300 text-sm mb-1">Como Jogar:</p>
+                <p><i class="fa-solid fa-gamepad mr-1 text-yellow-400"></i> Desvia-te dos obstáculos e chega ao pódio!</p>
+                <p><i class="fa-solid fa-book-bible mr-1 text-yellow-400"></i> Completa o versículo no checkpoint para salvar o progresso!</p>
+                <p><i class="fa-solid fa-bolt mr-1 text-yellow-400"></i> **Super Salto**: Usa o botão dourado para flutuar por cima dos perigos!</p>
+            </div>
+
+            <!-- Botão Jogar -->
+            <button id="btn-play" class="w-full py-4 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-indigo-950 font-black text-2xl rounded-2xl shadow-[0_6px_0px_#b45309] hover:translate-y-[2px] hover:shadow-[0_4px_0px_#b45309] active:translate-y-[6px] active:shadow-none transition-all cursor-pointer title-font uppercase">
+                Iniciar Corrida!
+            </button>
+        </div>
+    </div>
+
+    <!-- TELA DO PORTAL / CHECKPOINT INTERATIVO -->
+    <div id="checkpoint-screen" class="absolute inset-0 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md z-40 hidden">
+        <div class="bg-gradient-to-b from-amber-50 to-orange-100 text-indigo-950 max-w-lg w-full rounded-3xl p-6 md:p-8 shadow-2xl border-4 border-amber-400 flex flex-col space-y-6 relative overflow-hidden">
+            <div class="absolute -right-8 -bottom-8 text-amber-200/40 text-9xl pointer-events-none transform -rotate-12">
+                <i class="fa-solid fa-book-bible"></i>
+            </div>
+
+            <div class="text-center space-y-2 relative z-10">
+                <div class="inline-flex items-center gap-2 px-4 py-1.5 bg-amber-200 rounded-full text-amber-800 text-xs font-bold uppercase tracking-widest animate-bounce">
+                    <i class="fa-solid fa-scroll"></i> Desafio Bíblico!
+                </div>
+                <h2 class="text-2xl md:text-3xl font-extrabold title-font text-amber-900 leading-tight">Completa o Versículo</h2>
+                <p class="text-xs text-amber-800/90 font-bold bg-white/50 px-3 py-1 rounded-full inline-block">Acerta para ativar e salvar este Checkpoint!</p>
+            </div>
+
+            <div class="bg-white/90 p-5 rounded-2xl border-2 border-dashed border-amber-300 text-base md:text-lg font-bold leading-relaxed shadow-inner italic text-center relative z-10 text-indigo-950" id="verse-box">
+                "O Senhor é o meu __________, nada me faltará."
+            </div>
+
+            <div class="text-right text-xs font-bold text-amber-700 uppercase tracking-wider" id="verse-reference">
+                - Salmos 23:1
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 relative z-10" id="options-container">
+                <!-- Inserido dinamicamente via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- FEEDBACK POPUP (X Vermelho ou Check Verde) -->
+    <div id="feedback-overlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-50 hidden pointer-events-none">
+        <div id="feedback-icon-container" class="transform scale-50 opacity-0 transition-all duration-300 flex flex-col items-center">
+            <!-- Ícones preenchidos por JS -->
+        </div>
+    </div>
+
+    <!-- CONTROLES MOBILE (POSICIONADOS MAIS ACIMA) -->
+    <div id="mobile-controls" class="absolute inset-x-0 bottom-24 pb-8 px-8 flex justify-between items-end pointer-events-none z-10 md:hidden">
+        <div id="joystick-container" class="w-32 h-32 bg-black/45 rounded-full border-2 border-white/20 p-2 flex items-center justify-center pointer-events-auto shadow-2xl backdrop-blur-sm">
+            <div id="joystick-knob" class="w-14 h-14 bg-gradient-to-br from-indigo-400 to-indigo-600 rounded-full border-2 border-white shadow-lg cursor-pointer"></div>
+        </div>
+
+        <div class="flex flex-col gap-4 items-center pointer-events-auto">
+            <button id="btn-mobile-superjump" class="w-16 h-16 bg-gradient-to-br from-yellow-300 to-amber-500 rounded-full border-4 border-yellow-200/60 flex flex-col items-center justify-center text-amber-950 text-[10px] font-black shadow-lg relative overflow-hidden transition transform active:scale-90 active:brightness-95 cursor-pointer">
+                <i class="fa-solid fa-bolt text-lg"></i>
+                SUPER
+                <div id="superjump-mobile-overlay" class="absolute inset-0 bg-black/50 transition-all duration-100 h-0"></div>
+            </button>
+
+            <button id="btn-mobile-jump" class="w-24 h-24 bg-gradient-to-br from-indigo-400 to-purple-600 hover:from-indigo-300 hover:to-purple-500 rounded-full border-4 border-white/40 flex items-center justify-center text-white text-xl font-black shadow-2xl transform active:scale-90 transition active:shadow-inner cursor-pointer">
+                SALTO
+            </button>
+        </div>
+    </div>
+
+    <!-- TELA DE FIM DE JOGO / PODIUM -->
+    <div id="gameover-screen" class="absolute inset-0 flex flex-col items-center justify-center p-6 bg-indigo-950/95 z-50 hidden">
+        <div class="max-w-md w-full text-center space-y-8">
+            <div id="podium-header" class="space-y-2">
+                <h1 class="text-4xl md:text-5xl title-font text-amber-400" id="gameover-title">CORRIDA ENCERRADA!</h1>
+                <p class="text-indigo-200 font-bold" id="gameover-subtitle">Vê a tua classificação final</p>
+            </div>
+
+            <div class="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 space-y-6 shadow-2xl text-center">
+                <div class="inline-flex items-center justify-center w-24 h-24 rounded-full bg-amber-500 border-4 border-white shadow-xl text-4xl title-font mb-2" id="podium-badge">
+                    #1
+                </div>
+                <div>
+                    <h3 class="text-2xl font-black" id="podium-message">Venceste a corrida!</h3>
+                    <p class="text-sm text-indigo-200 mt-1" id="podium-detail">Correste contra 10 oponentes.</p>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <button id="btn-restart" class="w-full py-4 bg-gradient-to-r from-emerald-400 to-green-500 hover:from-emerald-300 hover:to-green-400 text-emerald-950 font-black text-xl rounded-2xl shadow-[0_6px_0px_#047857] hover:translate-y-[2px] hover:shadow-[0_4px_0px_#047857] active:translate-y-[6px] active:shadow-none transition-all cursor-pointer title-font uppercase">
+                    Jogar Novamente!
+                </button>
+                <button id="btn-back-menu" class="w-full py-3 bg-indigo-800 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl border border-indigo-600 transition cursor-pointer">
+                    Voltar ao Menu
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- INICIALIZAÇÃO DE ÁUDIO SEGURA ---
+        let audioCtx = null;
+        
+        function playSound(type) {
+            try {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        audioCtx = new AudioContext();
+                    }
+                }
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                if (!audioCtx) return;
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'jump') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(160, now);
+                    osc.frequency.exponentialRampToValueAtTime(380, now + 0.12);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                    osc.start(now);
+                    osc.stop(now + 0.12);
+                } else if (type === 'superjump') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(800, now + 0.3);
+                    gain.gain.setValueAtTime(0.35, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'success') {
+                    const notes = [261.63, 329.63, 392.00, 523.25];
+                    notes.forEach((freq, idx) => {
+                        const o = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        o.connect(g);
+                        g.connect(audioCtx.destination);
+                        o.type = 'sine';
+                        o.frequency.setValueAtTime(freq, now + idx * 0.08);
+                        g.gain.setValueAtTime(0.12, now + idx * 0.08);
+                        g.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.25);
+                        o.start(now + idx * 0.08);
+                        o.stop(now + idx * 0.08 + 0.25);
+                    });
+                } else if (type === 'fail') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(200, now);
+                    osc.frequency.linearRampToValueAtTime(100, now + 0.35);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'win') {
+                    const fanfarra = [392, 392, 392, 523.25, 659.25];
+                    const tempos = [0, 0.08, 0.16, 0.24, 0.4];
+                    const duracoes = [0.06, 0.06, 0.06, 0.12, 0.35];
+                    fanfarra.forEach((freq, idx) => {
+                        const o = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        o.connect(g);
+                        g.connect(audioCtx.destination);
+                        o.type = 'triangle';
+                        o.frequency.setValueAtTime(freq, now + tempos[idx]);
+                        g.gain.setValueAtTime(0.1, now + tempos[idx]);
+                        g.gain.exponentialRampToValueAtTime(0.01, now + tempos[idx] + duracoes[idx]);
+                        o.start(now + tempos[idx]);
+                        o.stop(now + tempos[idx] + duracoes[idx]);
+                    });
+                }
+            } catch (e) {
+                console.warn("Áudio indisponível.");
+            }
+        }
+
+        // --- CONFIGURAÇÃO DE MAPAS BÍBLICOS E LAYOUTS DIVERSIFICADOS ---
+        const mapConfigs = [
+            { id: 0, name: "O Jardim do Éden", bg: "#0d2b18", fog: "#0d2b18", platColor: "#22c55e", obstColor: "#ef4444", layout: 0 },
+            { id: 1, name: "A Arca de Noé", bg: "#111827", fog: "#111827", platColor: "#78350f", obstColor: "#eab308", layout: 1 },
+            { id: 2, name: "A Travessia do Mar Vermelho", bg: "#450a0a", fog: "#450a0a", platColor: "#38bdf8", obstColor: "#ea580c", layout: 2 },
+            { id: 3, name: "O Vale de Elá - David", bg: "#2d1c10", fog: "#2d1c10", platColor: "#ca8a04", obstColor: "#4b5563", layout: 0 },
+            { id: 4, name: "As Muralhas de Jericó", bg: "#3f0712", fog: "#3f0712", platColor: "#991b1b", obstColor: "#fbbf24", layout: 1 },
+            { id: 5, name: "O Templo de Salomão", bg: "#1e1b4b", fog: "#1e1b4b", platColor: "#ffffff", obstColor: "#fbbf24", layout: 2 },
+            { id: 6, name: "A Estrada para Damasco", bg: "#0f172a", fog: "#0f172a", platColor: "#facc15", obstColor: "#60a5fa", layout: 0 },
+            { id: 7, name: "O Cume do Monte Sinai", bg: "#230f2d", fog: "#230f2d", platColor: "#6b21a8", obstColor: "#f472b6", layout: 1 },
+            { id: 8, name: "O Mar da Galileia", bg: "#042f2e", fog: "#042f2e", platColor: "#0d9488", obstColor: "#38bdf8", layout: 2 },
+            { id: 9, name: "A Nova Jerusalém", bg: "#020617", fog: "#020617", platColor: "#a855f7", obstColor: "#f43f5e", layout: 0 }
+        ];
+
+        let activeMapIndex = 0;
+
+        // --- BANCO DE VERSÍCULOS BÍBLICOS ---
+        const bibleVerses = [
+            { verse: "O Senhor é o meu ________, nada me faltará.", options: ["pastor", "guia", "escudo", "amigo"], answer: "pastor", ref: "Salmos 23:1" },
+            { verse: "Porque Deus amou o mundo de tal maneira que deu o seu Filho ________...", options: ["primogênito", "unigênito", "escolhido", "amado"], answer: "unigênito", ref: "João 3:16" },
+            { verse: "Tudo posso naquele que me ________.", options: ["guia", "ama", "fortalece", "protege"], answer: "fortalece", ref: "Filipenses 4:13" },
+            { verse: "No princípio, criou Deus os céus e a ________.", options: ["terra", "luz", "natureza", "humanidade"], answer: "terra", ref: "Gênesis 1:1" },
+            { verse: "Lâmpada para os meus pés é tua palavra e luz, para o meu ________.", options: ["coração", "espírito", "caminho", "olhar"], answer: "caminho", ref: "Salmos 119:105" },
+            { verse: "Guardei a tua palavra no meu ________, para não pecar contra ti.", options: ["pensamento", "coração", "templo", "caderno"], answer: "coração", ref: "Salmos 119:11" },
+            { verse: "O que vem a mim de maneira nenhuma o lançarei ________.", options: ["fora", "no abismo", "no fogo", "atrás"], answer: "fora", ref: "João 6:37" },
+            { verse: "Honra a teu pai e a tua ________, para que se prolonguem os teus dias.", options: ["família", "mãe", "irmã", "vó"], answer: "mãe", ref: "Êxodo 20:12" },
+            { verse: "Creia no Senhor Jesus e será salvo, tu e a tua ________.", options: ["família", "casa", "cidade", "vida"], answer: "casa", ref: "Atos 16:31" },
+            { verse: "Deixem vir a mim as ________ e não as impeçam, pois delas é o Reino.", options: ["crianças", "ovelhas", "pessoas", "flores"], answer: "crianças", ref: "Mateus 19:14" }
+        ];
+
+        // --- CONFIGURAÇÃO JOGO GLOBAL & ESTADOS ---
+        let scene, camera, renderer;
+        let playerColor = "#3b82f6"; 
+        let playerName = "Herói";
+        let gameState = 'menu'; 
+        let currentCheckpointPortal = null; 
+
+        let cinematicProgress = 0; 
+        let countdownValue = 3;
+        let countdownTimer = 0;
+        
+        let gameTime = 0; 
+
+        const keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
+        let joystickInput = { x: 0, y: 0 };
+        const gravity = -0.0085; 
+
+        let platforms = [];
+        let obstacles = [];
+        let checkpoints = [];
+        let particles = []; 
+        let finishLineMesh;
+        
+        let player = {
+            mesh: null, radius: 0.5, height: 1.4,
+            pos: new THREE.Vector3(0, 1.0, 10), 
+            vel: new THREE.Vector3(0, 0, 0),
+            isGrounded: false, speed: 0.13, jumpForce: 0.19, 
+            superJumpCooldown: 0, superJumpMaxCooldown: 5000, 
+            checkpointSaved: null,
+            nameTag: null, knockbackTimer: 0 
+        };
+
+        let bots = [];
+        const botNames = ["Davi", "Sarah", "Gabriel", "Ester", "Mateus", "Rebeca", "Samuel", "Noé", "Daniel", "Lucas"];
+        const botColors = ["#ef4444", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#14b8a6", "#f43f5e", "#06b6d4", "#a855f7", "#eab308"];
+
+        let checkpointData = [];
+        let botPathNodesBase = []; 
+
+        window.onload = function() {
+            try {
+                init3D();
+                setupDOMEvents();
+                const randomSuffix = Math.floor(10 + Math.random() * 90);
+                const nameInput = document.getElementById('player-name-input');
+                if (nameInput) {
+                    nameInput.value = `Herói${randomSuffix}`;
+                }
+                buildCourse(); 
+                initPlayer();
+                initBots();
+                animate(); 
+            } catch (err) {
+                console.error("Falha na inicialização segura do jogo:", err);
+            }
+        };
+
+        function init3D() {
+            const container = document.getElementById('game-container');
+            const width = container.clientWidth || window.innerWidth || 800;
+            const height = container.clientHeight || window.innerHeight || 600;
+
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+            camera.position.set(0, 6, 16);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight('#ffffff', 0.7);
+            scene.add(ambientLight);
+            
+            const dirLight = new THREE.DirectionalLight('#ffffff', 0.95);
+            dirLight.position.set(15, 45, 15);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 250;
+            const d = 50;
+            dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            createBackgroundDecorations();
+            window.addEventListener('resize', onWindowResize);
+            
+            applyMapStyle(mapConfigs[0]);
+        }
+
+        // --- Etiqueta de Nome ---
+        function drawRoundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius); ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height); ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius); ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y); ctx.closePath();
+        }
+
+        function createNameTagSprite(name, isPlayer = false) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = isPlayer ? 'rgba(234, 179, 8, 0.85)' : 'rgba(0, 0, 0, 0.6)'; 
+            drawRoundRect(ctx, 10, 10, 236, 44, 20); ctx.fill();
+            ctx.lineWidth = 3; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+
+            ctx.font = 'bold 22px "Fredoka One", "Quicksand", sans-serif';
+            ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'; ctx.shadowBlur = 4;
+            ctx.fillText(name, 128, 32);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(2.2, 0.55, 1.0);
+            return sprite;
+        }
+
+        function applyMapStyle(config) {
+            if (!scene || !config) return;
+            scene.background = new THREE.Color(config.bg);
+            if (scene.fog) {
+                scene.fog.color = new THREE.Color(config.fog);
+            }
+        }
+
+        // --- CONSTRUÇÃO DA PISTA DINÂMICA ---
+        function buildCourse() {
+            platforms.forEach(p => scene.remove(p.mesh));
+            obstacles.forEach(o => scene.remove(o.mesh));
+            checkpoints.forEach(c => { scene.remove(c.mesh); scene.remove(c.gateMesh); });
+            if (finishLineMesh) scene.remove(finishLineMesh);
+            
+            platforms = []; obstacles = []; checkpoints = []; particles = []; checkpointData = [];
+            const cfg = mapConfigs[activeMapIndex];
+            
+            // Base Start Platform (comum a todos)
+            createPlatform(0, 0, 2, 16, 2, 32, cfg.platColor);
+
+            if (cfg.layout === 0) {
+                // LAYOUT 0: Clássico Melhorado
+                createPlatform(0, 0, -28, 14, 2, 24, cfg.platColor); 
+                createSpinner(0, 1.4, -28, 11.5, cfg.obstColor, 0.012); 
+                
+                createPlatform(0, 0, -44, 12, 2, 10, '#d97706'); createCheckpointGate(1, -44); checkpointData.push({ z: -44, answered: false });
+                
+                createPlatform(0, 0, -52, 12, 2, 7, cfg.platColor); 
+                createMovingPlatform(-4, 0, -60, 5.5, 1.2, 5.5, '#10b981', 'y', 1.8, 0, 0.015);  
+                createMovingPlatform(0, 0.8, -67, 5.5, 1.2, 5.5, '#10b981', 'x', 3.0, 3, 0.012); 
+                createMovingPlatform(4, 0, -74, 5.5, 1.2, 5.5, '#10b981', 'y', 1.8, 1.5, 0.015); 
+                createPlatform(0, 0, -82, 12, 2, 7, cfg.platColor); 
+                
+                createPlatform(0, 0, -92, 12, 2, 10, '#d97706'); createCheckpointGate(2, -92); checkpointData.push({ z: -92, answered: false });
+                
+                createPlatform(0, 0, -117, 10, 2, 40, cfg.platColor); 
+                createPendulum(0, 8.0, -106, 5.5, cfg.obstColor, 0.02, 0);       
+                createPendulum(0, 8.0, -117, 5.5, cfg.obstColor, 0.02, Math.PI/2); 
+                createPendulum(0, 8.0, -128, 5.5, cfg.obstColor, 0.02, Math.PI);   
+                
+                createPlatform(0, 0, -142, 12, 2, 10, '#d97706'); createCheckpointGate(3, -142); checkpointData.push({ z: -142, answered: false });
+                
+                createPlatform(0, 0, -165, 12, 2, 32, cfg.platColor); 
+                createRoller(0, 1.3, -155, 10, cfg.obstColor, -0.015); 
+                createRoller(0, 1.3, -175, 10, cfg.obstColor, 0.015); 
+                
+                createPlatform(0, 0, -200, 16, 2, 32, '#059669'); createVictoryArch(0, 0, -202);
+                
+                botPathNodesBase = [
+                    { z: 10, x: 0 }, { z: -10, x: 0 }, { z: -28, x: 0 }, { z: -44, x: 0 }, { z: -52, x: 0 },
+                    { z: -60, x: -4, platRef: true }, { z: -67, x: 0, platRef: true }, { z: -74, x: 4, platRef: true },
+                    { z: -82, x: 0 }, { z: -92, x: 0 }, { z: -117, x: 0 }, { z: -142, x: 0 },
+                    { z: -165, x: 0 }, { z: -200, x: 0 }, { z: -215, x: 0 }
+                ];
+            } 
+            else if (cfg.layout === 1) {
+                // LAYOUT 1: Foco em Saltos Exatos (Intervalos/Gaps)
+                createPlatform(0, 0, -20, 8, 2, 8, cfg.platColor); 
+                createPlatform(0, 0, -32, 8, 2, 8, cfg.platColor); 
+                
+                createPlatform(0, 0, -45, 12, 2, 10, '#d97706'); createCheckpointGate(1, -45); checkpointData.push({ z: -45, answered: false });
+                
+                createPlatform(0, 0, -60, 10, 2, 12, cfg.platColor); createRoller(0, 1.3, -60, 8, cfg.obstColor, 0.02);
+                createPlatform(0, 0, -75, 10, 2, 12, cfg.platColor); createRoller(0, 1.3, -75, 8, cfg.obstColor, -0.02);
+                
+                createPlatform(0, 0, -90, 12, 2, 10, '#d97706'); createCheckpointGate(2, -90); checkpointData.push({ z: -90, answered: false });
+                
+                createPlatform(0, 0, -115, 12, 2, 30, cfg.platColor);
+                createPendulum(-2, 8.0, -105, 6, cfg.obstColor, 0.025, 0);
+                createPendulum(2, 8.0, -115, 6, cfg.obstColor, 0.025, Math.PI);
+                createPendulum(-2, 8.0, -125, 6, cfg.obstColor, 0.025, 0);
+                
+                createPlatform(0, 0, -145, 12, 2, 10, '#d97706'); createCheckpointGate(3, -145); checkpointData.push({ z: -145, answered: false });
+                
+                createPlatform(0, 0, -170, 14, 2, 20, cfg.platColor);
+                createSpinner(0, 1.4, -165, 10, cfg.obstColor, 0.018);
+                createSpinner(0, 1.4, -175, 10, cfg.obstColor, -0.018);
+                
+                createPlatform(0, 0, -195, 16, 2, 32, '#059669'); createVictoryArch(0, 0, -197);
+                
+                botPathNodesBase = [
+                    { z: 10, x: 0 }, { z: -10, x: 0 }, { z: -20, x: 0 }, { z: -32, x: 0 }, { z: -45, x: 0 },
+                    { z: -60, x: 0 }, { z: -75, x: 0 }, { z: -90, x: 0 }, { z: -115, x: 0 },
+                    { z: -145, x: 0 }, { z: -170, x: 0 }, { z: -195, x: 0 }, { z: -210, x: 0 }
+                ];
+            }
+            else if (cfg.layout === 2) {
+                // LAYOUT 2: Caos em Movimento Lateral
+                createPlatform(0, 0, -20, 14, 2, 20, cfg.platColor);
+                createPendulum(0, 8.0, -15, 5, cfg.obstColor, 0.02, 0);
+                createPendulum(0, 8.0, -25, 5, cfg.obstColor, 0.02, Math.PI);
+                
+                createPlatform(0, 0, -40, 12, 2, 10, '#d97706'); createCheckpointGate(1, -40); checkpointData.push({ z: -40, answered: false });
+                
+                createPlatform(0, 0, -48, 12, 2, 6, cfg.platColor);
+                createMovingPlatform(0, 0, -56, 8, 1.2, 6, '#10b981', 'x', 4.0, 0, 0.015);
+                createMovingPlatform(0, 0, -66, 8, 1.2, 6, '#10b981', 'x', 4.0, 3, 0.015);
+                createPlatform(0, 0, -74, 12, 2, 6, cfg.platColor);
+                
+                createPlatform(0, 0, -85, 12, 2, 10, '#d97706'); createCheckpointGate(2, -85); checkpointData.push({ z: -85, answered: false });
+                
+                createPlatform(0, 0, -105, 14, 2, 24, cfg.platColor);
+                createRoller(0, 1.3, -98, 12, cfg.obstColor, 0.02);
+                createSpinner(0, 1.4, -112, 11, cfg.obstColor, -0.015);
+                
+                createPlatform(0, 0, -130, 12, 2, 10, '#d97706'); createCheckpointGate(3, -130); checkpointData.push({ z: -130, answered: false });
+                
+                createPlatform(0, 0, -155, 10, 2, 34, cfg.platColor);
+                createPendulum(0, 8.0, -145, 6, cfg.obstColor, 0.03, 0);
+                createPendulum(0, 8.0, -165, 6, cfg.obstColor, 0.03, Math.PI/2);
+                
+                createPlatform(0, 0, -190, 16, 2, 32, '#059669'); createVictoryArch(0, 0, -192);
+
+                botPathNodesBase = [
+                    { z: 10, x: 0 }, { z: -10, x: 0 }, { z: -20, x: 0 }, { z: -40, x: 0 }, { z: -48, x: 0 },
+                    { z: -56, x: 0, platRef: true }, { z: -66, x: 0, platRef: true }, { z: -74, x: 0 },
+                    { z: -85, x: 0 }, { z: -105, x: 0 }, { z: -130, x: 0 }, { z: -155, x: 0 },
+                    { z: -190, x: 0 }, { z: -205, x: 0 }
+                ];
+            }
+        }
+
+        function createPlatform(x, y, z, w, h, d, c) {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.1 }));
+            m.position.set(x, y, z); m.receiveShadow = true; m.castShadow = true; scene.add(m);
+            platforms.push({ mesh: m, width: w, height: h, depth: d, type: 'static', lastPos: new THREE.Vector3(x, y, z) });
+        }
+
+        function createMovingPlatform(x, y, z, w, h, d, c, axis, range, offset, speed) {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 }));
+            m.position.set(x, y, z); m.receiveShadow = true; m.castShadow = true; scene.add(m);
+            platforms.push({ mesh: m, width: w, height: h, depth: d, type: 'moving', axis: axis, basePos: new THREE.Vector3(x, y, z), range: range, offset: offset, speed: speed, lastPos: new THREE.Vector3(x, y, z) });
+        }
+
+        function createSpinner(x, y, z, len, c, speed) {
+            const g = new THREE.Group(); g.position.set(x, y, z);
+            const bm = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 1.5, 8), new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 }));
+            bm.position.y = -0.5; bm.receiveShadow = true; g.add(bm);
+            const am = new THREE.Mesh(new THREE.BoxGeometry(len, 0.6, 0.6), new THREE.MeshStandardMaterial({ color: c, roughness: 0.3 }));
+            am.castShadow = true; am.position.y = 0.5; g.add(am);
+            scene.add(g);
+            obstacles.push({ mesh: g, type: 'spinner', speed: speed, length: len, radius: len/2 });
+        }
+
+        function createPendulum(x, y, z, len, c, speed, offset) {
+            const g = new THREE.Group(); g.position.set(x, y, z);
+            const rm = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, len, 8), new THREE.MeshStandardMaterial({ color: 0x475569 }));
+            rm.position.y = -len/2; rm.castShadow = true; g.add(rm);
+            const bm = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshStandardMaterial({ color: c, metalness: 0.2, roughness: 0.3 }));
+            bm.position.y = -len; bm.castShadow = true; g.add(bm);
+            scene.add(g);
+            obstacles.push({ mesh: g, type: 'pendulum', speed: speed, offset: offset, length: len, ballRadius: 1.5 });
+        }
+
+        function createRoller(x, y, z, len, c, speed) {
+            const g = new THREE.Group(); g.position.set(x, y, z);
+            const rGeom = new THREE.CylinderGeometry(0.4, 0.4, len, 12); rGeom.rotateZ(Math.PI/2);
+            const rm = new THREE.Mesh(rGeom, new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 }));
+            rm.castShadow = true; g.add(rm);
+            const supM = new THREE.MeshStandardMaterial({ color: 0x1e293b });
+            const sL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.5, 0.5), supM); sL.position.set(-len/2 - 0.25, -0.5, 0);
+            const sR = sL.clone(); sR.position.x = len/2 + 0.25;
+            g.add(sL); g.add(sR); scene.add(g);
+            obstacles.push({ mesh: g, type: 'roller', speed: speed, length: len, radius: 0.4 });
+        }
+
+        function createCheckpointGate(num, z) {
+            const g = new THREE.Group(); g.position.set(0, 1, z);
+            const pMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4 });
+            const lP = new THREE.Mesh(new THREE.BoxGeometry(0.8, 4.5, 0.8), pMat); lP.position.set(-4, 1.25, 0); lP.castShadow = true;
+            const rP = lP.clone(); rP.position.x = 4;
+            const tB = new THREE.Mesh(new THREE.BoxGeometry(9, 0.8, 0.8), pMat); tB.position.set(0, 3.5, 0); tB.castShadow = true;
+            g.add(lP); g.add(rP); g.add(tB);
+            const sign = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.2, 0.2), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+            sign.position.set(0, 4.5, 0); g.add(sign);
+            const ring = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.1, 0.4), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+            ring.position.set(0, 3.1, 0); g.add(ring);
+            scene.add(g); checkpoints.push({ mesh: g, gateMesh: ring, z: z, number: num, width: 8 });
+        }
+
+        function createVictoryArch(x, y, z) {
+            const g = new THREE.Group(); g.position.set(x, y + 1, z);
+            const gold = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.8, roughness: 0.1 });
+            const lP = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 7, 16), gold); lP.position.set(-5, 2.5, 0); lP.castShadow = true;
+            const rP = lP.clone(); rP.position.x = 5;
+            const tA = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 11, 16).rotateZ(Math.PI/2), gold); tA.position.set(0, 6, 0); tA.castShadow = true;
+            g.add(lP); g.add(rP); g.add(tA);
+            const ban = new THREE.Mesh(new THREE.BoxGeometry(9, 2, 0.2), new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.5 }));
+            ban.position.set(0, 4.2, 0); g.add(ban);
+            scene.add(g); finishLineMesh = g;
+        }
+
+        function createBackgroundDecorations() {
+            const g = new THREE.Group();
+            for (let i = 0; i < 15; i++) {
+                const cloud = new THREE.Group();
+                const numS = 3 + Math.floor(Math.random() * 3);
+                const cMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.2 });
+                for (let j = 0; j < numS; j++) {
+                    const s = new THREE.Mesh(new THREE.SphereGeometry(2 + Math.random() * 3, 8, 8), cMat);
+                    s.position.set(j * 2 - numS, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2);
+                    cloud.add(s);
+                }
+                cloud.position.set((Math.random() - 0.5) * 200, 15 + Math.random() * 25, -30 - Math.random() * 180);
+                g.add(cloud);
+            }
+            scene.add(g);
+        }
+
+        function createSuperJumpParticles(pos) {
+            for (let i = 0; i < 20; i++) {
+                const m = new THREE.Mesh(new THREE.SphereGeometry(0.1 + Math.random() * 0.15, 6, 6), new THREE.MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.95 }));
+                m.position.copy(pos); m.position.y += 0.2; 
+                const a = Math.random() * Math.PI * 2, s = 0.06 + Math.random() * 0.09;
+                particles.push({ mesh: m, vel: new THREE.Vector3(Math.cos(a) * s, 0.07 + Math.random() * 0.12, Math.sin(a) * s), life: 1.0, decay: 0.025 + Math.random() * 0.025 });
+                scene.add(m);
+            }
+        }
+
+        // --- MODELO DOS PERSONAGENS ---
+        function createCharacterMesh(cHex) {
+            const g = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.0, 0.5), new THREE.MeshStandardMaterial({ color: cHex, roughness: 0.3 }));
+            body.position.y = 0.6; body.castShadow = true; body.receiveShadow = true; g.add(body);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.4 }));
+            head.position.y = 1.25; head.castShadow = true; g.add(head);
+            const eyeM = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const eL = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), eyeM); eL.position.set(-0.13, 1.3, 0.34);
+            const eR = eL.clone(); eR.position.x = 0.13;
+            g.add(eL); g.add(eR);
+            const band = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.15, 0.8), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+            band.position.y = 1.35; g.add(band);
+            const legM = new THREE.MeshStandardMaterial({ color: 0x334155 });
+            const lL = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.4, 8), legM); lL.position.set(-0.18, 0.12, 0); lL.castShadow = true;
+            const lR = lL.clone(); lR.position.x = 0.18;
+            g.add(lL); g.add(lR);
+            g.userData = { legL: lL, legR: lR };
+            return g;
+        }
+
+        function initPlayer() {
+            if (player.mesh) scene.remove(player.mesh);
+            player.mesh = createCharacterMesh(playerColor);
+            player.pos.set(0, 1.0, 10); player.mesh.position.copy(player.pos); scene.add(player.mesh);
+            if (player.nameTag) scene.remove(player.nameTag);
+            player.nameTag = createNameTagSprite(playerName, true);
+            player.mesh.add(player.nameTag); player.nameTag.position.set(0, 2.0, 0); 
+            player.vel.set(0, 0, 0); player.checkpointSaved = new THREE.Vector3(0, 1.0, 10); 
+            player.superJumpCooldown = 0; player.knockbackTimer = 0;
+            updateCheckpointHUD(false, "Nenhum Guardado");
+        }
+
+        function initBots() {
+            bots.forEach(b => { if (b.mesh) scene.remove(b.mesh); });
+            bots = [];
+            for (let i = 0; i < 10; i++) {
+                const c = botColors[i % botColors.length];
+                const mesh = createCharacterMesh(c);
+                const sX = (i - 4.5) * 1.3;
+                const botPos = new THREE.Vector3(sX, 1.0, 10 + (Math.random() - 0.5)); 
+                mesh.position.copy(botPos); scene.add(mesh);
+                const bName = botNames[i % botNames.length];
+                const nTag = createNameTagSprite(bName, false);
+                mesh.add(nTag); nTag.position.set(0, 2.0, 0); 
+
+                const customPath = botPathNodesBase.map(node => ({...node}));
+
+                bots.push({
+                    name: bName, mesh: mesh, pos: botPos, vel: new THREE.Vector3(0, 0, 0),
+                    isGrounded: false, radius: 0.5, height: 1.4, 
+                    speed: 0.08 + Math.random() * 0.05, 
+                    jumpForce: 0.17 + Math.random() * 0.03,
+                    intelligence: Math.random(), 
+                    laneOffset: (Math.random() - 0.5) * 5, 
+                    path: customPath, targetNodeIndex: 0, 
+                    checkpointSaved: new THREE.Vector3(sX, 1.0, 10),
+                    finished: false, finishTime: 0, nameTag: nTag, knockbackTimer: 0 
+                });
+            }
+        }
+
+        function setupDOMEvents() {
+            window.addEventListener('keydown', e => {
+                const k = e.key.toLowerCase();
+                if (k==='w' || k==='arrowup') keys.w = true; if (k==='s' || k==='arrowdown') keys.s = true;
+                if (k==='a' || k==='arrowleft') keys.a = true; if (k==='d' || k==='arrowright') keys.d = true;
+                if (k===' ' || e.code==='Space') { keys.space = true; e.preventDefault(); }
+                if (k==='shift' || k==='e') { keys.shift = true; }
+            });
+            window.addEventListener('keyup', e => {
+                const k = e.key.toLowerCase();
+                if (k==='w' || k==='arrowup') keys.w = false; if (k==='s' || k==='arrowdown') keys.s = false;
+                if (k==='a' || k==='arrowleft') keys.a = false; if (k==='d' || k==='arrowright') keys.d = false;
+                if (k===' ' || e.code==='Space') keys.space = false; if (k==='shift' || k==='e') keys.shift = false;
+            });
+
+            const colorBtns = document.querySelectorAll('.color-btn');
+            
+            if (colorBtns && colorBtns.length > 0) {
+                colorBtns[0].classList.remove('border-transparent');
+                colorBtns[0].classList.add('border-white', 'scale-110');
+            }
+            
+            colorBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    colorBtns.forEach(b => { 
+                        b.classList.remove('border-white', 'scale-110'); 
+                        b.classList.add('border-transparent'); 
+                    });
+                    btn.classList.remove('border-transparent');
+                    btn.classList.add('border-white', 'scale-110');
+                    playerColor = btn.getAttribute('data-color');
+                    if (gameState === 'menu') initPlayer();
+                });
+            });
+
+            const startGame = () => {
+                const nameInput = document.getElementById('player-name-input').value.trim();
+                playerName = nameInput.length > 0 ? nameInput : "Herói";
+                activeMapIndex = Math.floor(Math.random() * mapConfigs.length);
+                const cfg = mapConfigs[activeMapIndex];
+                document.getElementById('map-title-text').innerText = cfg.name;
+                document.getElementById('map-title-banner').classList.remove('hidden');
+                
+                applyMapStyle(cfg); 
+                playSound('success');
+                document.getElementById('menu-screen').classList.add('hidden');
+                document.getElementById('gameover-screen').classList.add('hidden');
+                
+                buildCourse(); 
+                initPlayer(); 
+                initBots();
+                
+                cinematicProgress = 0; 
+                gameState = 'cinematic';
+                gameTime = 0; 
+            };
+
+            document.getElementById('btn-play').addEventListener('click', startGame);
+            
+            document.getElementById('btn-restart').addEventListener('click', () => {
+                document.getElementById('hud').classList.add('hidden');
+                startGame();
+            });
+
+            document.getElementById('btn-back-menu').addEventListener('click', () => {
+                playSound('success'); document.getElementById('gameover-screen').classList.add('hidden');
+                document.getElementById('menu-screen').classList.remove('hidden');
+                document.getElementById('map-title-banner').classList.add('hidden');
+                document.getElementById('hud').classList.add('hidden'); gameState = 'menu';
+            });
+            
+            setupJoystick();
+        }
+
+        // --- SISTEMA DE JOYSTICK COM ARRASTAMENTO CONTÍNUO ---
+        function setupJoystick() {
+            const container = document.getElementById('joystick-container'), knob = document.getElementById('joystick-knob');
+            const jBtn = document.getElementById('btn-mobile-jump'), sjBtn = document.getElementById('btn-mobile-superjump');
+            let isDragging = false;
+            let activeTouchId = null;
+
+            const handleMove = (cX, cY) => {
+                const rect = container.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                let dx = cX - centerX;
+                let dy = cY - centerY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const maxRadius = rect.width / 2 - 20;
+
+                if (distance > maxRadius) {
+                    dx = (dx / distance) * maxRadius;
+                    dy = (dy / distance) * maxRadius;
+                }
+
+                knob.style.transform = `translate(${dx}px, ${dy}px)`;
+                
+                joystickInput.x = dx / maxRadius;
+                joystickInput.y = dy / maxRadius;
+            };
+
+            container.addEventListener('touchstart', e => {
+                if (e.cancelable) e.preventDefault();
+                isDragging = true;
+                const touch = e.changedTouches[0];
+                activeTouchId = touch.identifier;
+                handleMove(touch.clientX, touch.clientY);
+            }, { passive: false });
+
+            window.addEventListener('touchmove', e => {
+                if (!isDragging) return;
+                if (e.cancelable) e.preventDefault();
+                
+                for (let i = 0; i < e.touches.length; i++) {
+                    if (e.touches[i].identifier === activeTouchId) {
+                        handleMove(e.touches[i].clientX, e.touches[i].clientY);
+                        break;
+                    }
+                }
+            }, { passive: false });
+
+            window.addEventListener('touchend', e => {
+                if (!isDragging) return;
+                
+                let touchEnded = false;
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === activeTouchId) {
+                        touchEnded = true;
+                        break;
+                    }
+                }
+                
+                if (touchEnded) {
+                    isDragging = false;
+                    activeTouchId = null;
+                    knob.style.transform = 'translate(0px, 0px)';
+                    joystickInput.x = 0;
+                    joystickInput.y = 0;
+                }
+            });
+
+            jBtn.addEventListener('touchstart', e => { if (e.cancelable) e.preventDefault(); keys.space = true; }, { passive: false });
+            jBtn.addEventListener('touchend', e => { if (e.cancelable) e.preventDefault(); keys.space = false; }, { passive: false });
+            sjBtn.addEventListener('touchstart', e => { if (e.cancelable) e.preventDefault(); keys.shift = true; }, { passive: false });
+            sjBtn.addEventListener('touchend', e => { if (e.cancelable) e.preventDefault(); keys.shift = false; }, { passive: false });
+        }
+
+        // --- I.A. E FÍSICA ---
+        function checkBotJumpAhead(bot) {
+            if (!bot.isGrounded) return;
+            if (Math.abs(bot.vel.x) < 0.01 && Math.abs(bot.vel.z) < 0.01) return; 
+            
+            const lookDist = 1.8 + (bot.speed * 5);
+            const dir = new THREE.Vector3(bot.vel.x, 0, bot.vel.z).normalize();
+            const futureX = bot.pos.x + dir.x * lookDist;
+            const futureZ = bot.pos.z + dir.z * lookDist;
+            
+            let safeUnderFuture = false;
+            platforms.forEach(p => {
+                const hw = p.width / 2, hd = p.depth / 2, px = p.mesh.position.x, pz = p.mesh.position.z;
+                if (futureX >= px - hw - 0.4 && futureX <= px + hw + 0.4 &&
+                    futureZ >= pz - hd - 0.4 && futureZ <= pz + hd + 0.4) {
+                    safeUnderFuture = true;
+                }
+            });
+            
+            if (!safeUnderFuture) {
+                bot.vel.y = bot.jumpForce * (0.9 + (bot.intelligence * 0.15)); 
+                bot.isGrounded = false;
+                return;
+            }
+
+            obstacles.forEach(obs => {
+                if (obs.type === 'spinner' || obs.type === 'roller') {
+                    const distSq = Math.pow(obs.mesh.position.x - bot.pos.x, 2) + Math.pow(obs.mesh.position.z - bot.pos.z, 2);
+                    if (distSq < 12 && Math.random() < 0.1 * bot.intelligence) {
+                        bot.vel.y = bot.jumpForce; bot.isGrounded = false;
+                    }
+                }
+            });
+        }
+
+        function resolveCharacterCollisions() {
+            const list = [player, ...bots.filter(b => !b.finished)];
+            for (let i = 0; i < list.length; i++) {
+                for (let j = i + 1; j < list.length; j++) {
+                    const a = list[i], b = list[j];
+                    if (Math.abs(a.pos.y - b.pos.y) < 1.2) {
+                        const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
+                        const distSq = dx*dx + dz*dz;
+                        if (distSq < 0.9 && distSq > 0.0001) {
+                            const dist = Math.sqrt(distSq), overlap = (0.95 - dist) * 0.5;
+                            const px = (dx/dist)*overlap, pz = (dz/dist)*overlap;
+                            a.pos.x -= px; a.pos.z -= pz; b.pos.x += px; b.pos.z += pz;
+                            a.vel.x = a.vel.x*0.5 - px*0.2; a.vel.z = a.vel.z*0.5 - pz*0.2;
+                            b.vel.x = b.vel.x*0.5 + px*0.2; b.vel.z = b.vel.z*0.5 + pz*0.2;
+                            
+                            if (a !== player) a.laneOffset += (dx < 0 ? 0.2 : -0.2);
+                            if (b !== player) b.laneOffset += (dx > 0 ? 0.2 : -0.2);
+                        }
+                    }
+                }
+            }
+        }
+
+        function updatePhysics() {
+            if (gameState !== 'playing') return;
+
+            if (player.superJumpCooldown > 0) player.superJumpCooldown = Math.max(0, player.superJumpCooldown - 16.67);
+            const perc = ((player.superJumpMaxCooldown - player.superJumpCooldown) / player.superJumpMaxCooldown) * 100;
+            document.getElementById('super-jump-bar').style.width = `${perc}%`;
+            const mOver = document.getElementById('superjump-mobile-overlay');
+            if (mOver) mOver.style.height = `${100 - perc}%`;
+
+            if (!player.isGrounded) { player.vel.y += gravity; } else { player.vel.y = Math.max(0, player.vel.y); }
+            if (player.isGrounded && player.knockbackTimer <= 0) {
+                if (keys.shift && player.superJumpCooldown === 0) {
+                    player.vel.y = player.jumpForce * 1.95; player.isGrounded = false; player.superJumpCooldown = player.superJumpMaxCooldown;
+                    playSound('superjump'); createSuperJumpParticles(player.pos);
+                } else if (keys.space) {
+                    player.vel.y = player.jumpForce; player.isGrounded = false; playSound('jump');
+                }
+            }
+
+            if (player.knockbackTimer > 0) {
+                player.knockbackTimer--; player.vel.x *= 0.94; player.vel.z *= 0.94;
+            } else {
+                let mX = 0, mZ = 0;
+                if (keys.w) mZ -= 1; if (keys.s) mZ += 1; if (keys.a) mX -= 1; if (keys.d) mX += 1;
+                if (Math.abs(joystickInput.x)>0.1 || Math.abs(joystickInput.y)>0.1) { mX = joystickInput.x; mZ = joystickInput.y; }
+                const len = Math.sqrt(mX*mX + mZ*mZ);
+                if (len > 0) {
+                    mX /= len; mZ /= len; player.vel.x = mX * player.speed; player.vel.z = mZ * player.speed;
+                    player.mesh.rotation.y = Math.atan2(mX, mZ);
+                    const t = Date.now() * 0.015;
+                    player.mesh.userData.legL.position.y = 0.12 + Math.sin(t)*0.15; player.mesh.userData.legR.position.y = 0.12 - Math.sin(t)*0.15;
+                } else {
+                    player.vel.x = 0; player.vel.z = 0; player.mesh.userData.legL.position.y = 0.12; player.mesh.userData.legR.position.y = 0.12;
+                }
+            }
+            player.pos.add(player.vel);
+            if (player.pos.y < -12) respawnEntity(player);
+            player.isGrounded = false;
+            platforms.forEach(p => handleBoxCollision(player, p));
+
+            bots.forEach(bot => {
+                if (bot.finished) return;
+                if (!bot.isGrounded) { bot.vel.y += gravity; } else { bot.vel.y = Math.max(0, bot.vel.y); }
+
+                let tNode = bot.path[bot.targetNodeIndex];
+                if (bot.pos.z <= tNode.z + 1.0 && bot.targetNodeIndex < bot.path.length - 1) {
+                    bot.targetNodeIndex++; tNode = bot.path[bot.targetNodeIndex];
+                }
+
+                let targetX = tNode.x;
+                let tempLane = bot.laneOffset;
+                if (tNode.platRef) tempLane *= 0.3; 
+                targetX += tempLane;
+
+                if (tNode.platRef) {
+                    const plat = platforms.find(p => p.type === 'moving' && Math.abs(p.basePos.z - tNode.z) < 2);
+                    if (plat) targetX = plat.mesh.position.x + (tempLane * 0.5); 
+                }
+
+                if (bot.knockbackTimer > 0) {
+                    bot.knockbackTimer--; bot.vel.x *= 0.94; bot.vel.z *= 0.94;
+                } else {
+                    const dx = targetX - bot.pos.x, dz = tNode.z - bot.pos.z, dist = Math.sqrt(dx*dx + dz*dz);
+                    if (dist > 0.1) {
+                        bot.vel.x = (dx/dist) * bot.speed; bot.vel.z = (dz/dist) * bot.speed;
+                        bot.mesh.rotation.y = Math.atan2(bot.vel.x, bot.vel.z);
+                    }
+                    checkBotJumpAhead(bot);
+                    const t = Date.now() * 0.012 + bot.speed * 100;
+                    bot.mesh.userData.legL.position.y = 0.12 + Math.sin(t)*0.15; bot.mesh.userData.legR.position.y = 0.12 - Math.sin(t)*0.15;
+                }
+
+                if (bot.pos.x > 7) bot.laneOffset -= 0.1;
+                if (bot.pos.x < -7) bot.laneOffset += 0.1;
+
+                bot.pos.add(bot.vel);
+                if (bot.pos.y < -12) respawnEntity(bot);
+                bot.isGrounded = false;
+                platforms.forEach(p => handleBoxCollision(bot, p));
+            });
+
+            resolveCharacterCollisions();
+            player.mesh.position.copy(player.pos); if (player.nameTag) player.nameTag.rotation.copy(camera.rotation);
+            bots.forEach(b => { b.mesh.position.copy(b.pos); if (b.nameTag) b.nameTag.rotation.copy(camera.rotation); });
+        }
+
+        function handleBoxCollision(ent, p) {
+            const pos = p.mesh.position, hw = p.width/2, hh = p.height/2, hd = p.depth/2;
+            const r = ent.radius, h = ent.height;
+            if (ent.pos.x+r > pos.x-hw && ent.pos.x-r < pos.x+hw && ent.pos.z+r > pos.z-hd && ent.pos.z-r < pos.z+hd) {
+                if (ent.vel.y <= 0 && ent.pos.y >= pos.y+hh-0.75 && ent.pos.y <= pos.y+hh+0.75) {
+                    ent.pos.y = pos.y + hh; ent.isGrounded = true; ent.vel.y = 0;
+                    if (p.type === 'moving' && p.lastPos) {
+                        ent.pos.x += (pos.x - p.lastPos.x); ent.pos.y += (pos.y - p.lastPos.y);
+                    }
+                    return;
+                }
+                if (ent.pos.y+h > pos.y-hh && ent.pos.y < pos.y+hh) {
+                    const oX = Math.min(ent.pos.x+r - (pos.x-hw), (pos.x+hw) - (ent.pos.x-r));
+                    const oZ = Math.min(ent.pos.z+r - (pos.z-hd), (pos.z+hd) - (ent.pos.z-r));
+                    if (oX < oZ) { ent.pos.x = ent.pos.x < pos.x ? pos.x-hw-r : pos.x+hw+r; ent.vel.x = 0; } 
+                    else { ent.pos.z = ent.pos.z < pos.z ? pos.z-hd-r : pos.z+hd+r; ent.vel.z = 0; }
+                }
+            }
+        }
+
+        function respawnEntity(ent) {
+            if (ent === player) playSound('fail');
+            ent.pos.copy(ent.checkpointSaved); ent.vel.set(0, 0, 0);
+            ent.isGrounded = false; ent.knockbackTimer = 0; 
+        }
+
+        function updateObstacles() {
+            if (gameState !== 'playing') return;
+            
+            gameTime += 0.016; 
+            const timeInMs = gameTime * 1000;
+
+            platforms.forEach(p => {
+                if (p.lastPos) p.lastPos.copy(p.mesh.position);
+                if (p.type === 'moving') {
+                    const lT = (timeInMs + p.offset*1000) % 6000;
+                    let f = 0;
+                    if (lT < 2000) f = -1;
+                    else if (lT < 3000) { const a = (lT-2000)/1000; f = -1 + 2*(3*a*a - 2*a*a*a); }
+                    else if (lT < 5000) f = 1;
+                    else { const a = (lT-5000)/1000; f = 1 - 2*(3*a*a - 2*a*a*a); }
+                    if (p.axis === 'x') p.mesh.position.x = p.basePos.x + f*p.range;
+                    else if (p.axis === 'y') p.mesh.position.y = p.basePos.y + f*p.range;
+                }
+            });
+
+            obstacles.forEach(o => {
+                if (o.type === 'spinner') { o.mesh.rotation.y += o.speed; checkSpinnerCol(o); }
+                else if (o.type === 'pendulum') { 
+                    o.mesh.rotation.z = Math.sin(gameTime * 60 * o.speed + o.offset) * (Math.PI / 3.4); 
+                    checkPendulumCol(o); 
+                }
+                else if (o.type === 'roller') { o.mesh.rotation.x += o.speed; checkRollerCol(o); }
+            });
+
+            checkpoints.forEach((cp, idx) => {
+                if (Math.abs(player.pos.z - cp.z) < 1.5 && Math.abs(player.pos.x) < cp.width/2 && !checkpointData[idx]?.answered) {
+                    checkpointData[idx].answered = true; currentCheckpointPortal = cp;
+                    openCheckpointQuestion();
+                }
+                bots.forEach(b => { if (b.pos.z <= cp.z && b.checkpointSaved.z > cp.z) b.checkpointSaved.set(0, 1.0, cp.z); }); 
+            });
+
+            // Condição Final
+            if (platforms.length > 0) {
+                let endZ = platforms[platforms.length - 1].mesh.position.z; 
+                if (player.pos.z < endZ + 5) endGame();
+                bots.forEach(b => { if (!b.finished && b.pos.z < endZ + 5) { b.finished = true; b.finishTime = Date.now(); } });
+            }
+        }
+
+        function pushBack(ent, oPos, pwr=1.0) {
+            const dir = new THREE.Vector3().subVectors(ent.pos, oPos); dir.y = 0;
+            if (dir.lengthSq() < 0.001) dir.set(1, 0, 1);
+            dir.normalize();
+            ent.vel.x = dir.x * 0.45 * pwr; ent.vel.z = dir.z * 0.45 * pwr; ent.vel.y = 0.16 * pwr;
+            ent.isGrounded = false; ent.knockbackTimer = 25; 
+        }
+
+        function checkSpinnerCol(o) {
+            const p = o.mesh.position, l = o.length, th = o.mesh.rotation.y;
+            const check = (ent) => {
+                const ux = Math.cos(th), uz = -Math.sin(th), vx = ent.pos.x-p.x, vz = ent.pos.z-p.z;
+                let t = vx*ux + vz*uz; t = Math.max(-l/2, Math.min(l/2, t));
+                const cX = p.x + t*ux, cZ = p.z + t*uz;
+                if (Math.sqrt((ent.pos.x-cX)**2 + (ent.pos.z-cZ)**2) < ent.radius+0.35 && Math.abs(ent.pos.y+ent.height/2 - (p.y+0.5)) < 0.9)
+                    pushBack(ent, p, 1.5);
+            };
+            check(player); bots.forEach(check);
+        }
+
+        // CORREÇÃO CRÍTICA: Deteta colisão com base no ponto vertical mais próximo do cilindro do jogador em relação à esfera 3D
+        function checkPendulumCol(o) {
+            if (!o.mesh) return;
+            o.mesh.updateMatrixWorld(true); // Atualiza as coordenadas globais da bola
+            const ballWorldPos = new THREE.Vector3(0, -o.length, 0).applyMatrix4(o.mesh.matrixWorld);
+            
+            const check = (ent) => {
+                const entRadius = ent.radius !== undefined ? ent.radius : 0.5;
+                const entHeight = ent.height !== undefined ? ent.height : 1.4;
+                
+                // Encontrar o ponto mais próximo no eixo vertical (Y) da personagem
+                const closestY = Math.max(ent.pos.y, Math.min(ent.pos.y + entHeight, ballWorldPos.y));
+                const closestPoint = new THREE.Vector3(ent.pos.x, closestY, ent.pos.z);
+                
+                // Medir a distância real 3D entre a esfera e a capsula de colisão da personagem
+                const dist = closestPoint.distanceTo(ballWorldPos);
+                if (dist < (o.ballRadius + entRadius)) {
+                    pushBack(ent, ballWorldPos, 1.8); // Empurra para trás!
+                }
+            };
+
+            check(player);
+            bots.forEach(check);
+        }
+
+        function checkRollerCol(o) {
+            const check = (ent) => {
+                if (ent.pos.x > o.mesh.position.x-o.length/2 && ent.pos.x < o.mesh.position.x+o.length/2) {
+                    if (Math.sqrt((ent.pos.y-o.mesh.position.y)**2 + (ent.pos.z-o.mesh.position.z)**2) < o.radius + ent.radius) pushBack(ent, o.mesh.position, 1.2);
+                }
+            };
+            check(player); bots.forEach(check);
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i]; p.mesh.position.add(p.vel); p.life -= p.decay; p.mesh.material.opacity = p.life; p.mesh.scale.multiplyScalar(0.94);
+                if (p.life <= 0) { scene.remove(p.mesh); particles.splice(i, 1); }
+            }
+        }
+
+        // --- INTERAÇÕES UI / JOGO ---
+        function openCheckpointQuestion() {
+            gameState = 'checkpoint';
+            player.vel.set(0, 0, 0); player.isGrounded = true; 
+            bots.forEach(b => b.vel.set(0, 0, 0));
+            const data = bibleVerses[Math.floor(Math.random() * bibleVerses.length)];
+            document.getElementById('verse-box').innerText = data.verse;
+            document.getElementById('verse-reference').innerText = data.ref;
+            const container = document.getElementById('options-container'); container.innerHTML = '';
+            data.options.forEach(opt => {
+                const b = document.createElement('button');
+                b.className = "w-full py-4 px-6 bg-white hover:bg-amber-100 text-indigo-950 font-black rounded-2xl border-2 border-amber-300 text-left transition transform hover:scale-[1.01] hover:-translate-y-[1px] active:scale-95 flex items-center justify-between cursor-pointer shadow-md text-base md:text-lg";
+                b.innerHTML = `<span>${opt}</span> <i class="fa-solid fa-star text-amber-500 text-sm"></i>`;
+                b.onclick = () => evaluateAnswer(opt, data.answer);
+                container.appendChild(b);
+            });
+            document.getElementById('checkpoint-screen').classList.remove('hidden');
+        }
+
+        function evaluateAnswer(sel, cor) {
+            document.getElementById('checkpoint-screen').classList.add('hidden'); gameState = 'playing';
+            const isCor = (sel === cor), over = document.getElementById('feedback-overlay'), cnt = document.getElementById('feedback-icon-container');
+            over.classList.remove('hidden');
+            if (isCor) {
+                playSound('success');
+                cnt.innerHTML = `<div class="bg-emerald-500 text-white rounded-full p-8 shadow-2xl scale-110 mb-3 animate-bounce"><i class="fa-solid fa-check text-7xl"></i></div><span class="text-3xl font-black text-emerald-400 title-font drop-shadow-md">PARABÉNS, ${playerName.toUpperCase()}!</span><span class="text-sm font-bold text-white mt-1">Base guardada com sucesso!</span>`;
+                if (currentCheckpointPortal) { currentCheckpointPortal.gateMesh.material.color.setHex(0x10b981); updateCheckpointHUD(true, `Salvo nº ${currentCheckpointPortal.number}`); }
+                player.checkpointSaved.set(0, 1.0, currentCheckpointPortal.z); 
+            } else {
+                playSound('fail');
+                cnt.innerHTML = `<div class="bg-rose-500 text-white rounded-full p-8 shadow-2xl scale-110 mb-3 animate-pulse"><i class="fa-solid fa-xmark text-7xl"></i></div><span class="text-3xl font-black text-rose-400 title-font drop-shadow-md">ERROU! X</span><span class="text-sm font-bold text-white mt-1">Este checkpoint ficou fechado!</span>`;
+                if (currentCheckpointPortal) currentCheckpointPortal.gateMesh.material.color.setHex(0xef4444);
+            }
+            
+            setTimeout(() => { 
+                cnt.classList.remove('scale-50', 'opacity-0');
+                cnt.classList.add('scale-100', 'opacity-100');
+            }, 50);
+            
+            setTimeout(() => { 
+                cnt.classList.remove('scale-100', 'opacity-100');
+                cnt.classList.add('scale-50', 'opacity-0');
+                setTimeout(() => over.classList.add('hidden'), 300); 
+            }, 2500);
+        }
+
+        function updateCheckpointHUD(act, txt) {
+            const dot = document.getElementById('checkpoint-indicator-dot'), ind = document.getElementById('checkpoint-indicator-text');
+            dot.className = act ? "w-4 h-4 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" : "w-4 h-4 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]";
+            ind.className = act ? "text-sm font-bold text-emerald-400" : "text-sm font-bold text-red-400"; ind.innerText = txt;
+        }
+
+        function updateHUD() {
+            if (gameState !== 'playing') return;
+            let r = [{ name: playerName, z: player.pos.z, isPlayer: true }, ...bots.map(b => ({ name: b.name, z: b.pos.z, isPlayer: false }))];
+            r.sort((a, b) => a.z - b.z); 
+            document.getElementById('hud-position').innerText = `${r.findIndex(x => x.isPlayer) + 1}º`;
+            document.getElementById('hud-runners-count').innerText = `${bots.filter(b => !b.finished).length + 1} Corredores`;
+        }
+
+        function endGame() {
+            gameState = 'gameover'; document.getElementById('hud').classList.add('hidden');
+            document.getElementById('map-title-banner').classList.add('hidden'); document.getElementById('gameover-screen').classList.remove('hidden');
+            let fBots = bots.filter(b => b.finished).sort((a, b) => a.finishTime - b.finishTime);
+            const pos = fBots.length + 1;
+            const bge = document.getElementById('podium-badge'), tit = document.getElementById('gameover-title'), msg = document.getElementById('podium-message'), dtl = document.getElementById('podium-detail');
+            if (pos === 1) {
+                playSound('win'); bge.innerText = "🏆"; bge.className = "inline-flex items-center justify-center w-24 h-24 rounded-full bg-yellow-400 border-4 border-white shadow-xl text-4xl title-font mb-2 animate-bounce";
+                tit.innerText = "VITÓRIA GLORIOSA!"; msg.innerText = `Parabéns, ${playerName}!`; dtl.innerText = `Venceste em 1º Lugar no mapa ${mapConfigs[activeMapIndex].name}!`;
+            } else {
+                playSound('fail'); bge.innerText = `${pos}º`; bge.className = "inline-flex items-center justify-center w-24 h-24 rounded-full bg-slate-400 border-4 border-white shadow-xl text-4xl title-font mb-2";
+                tit.innerText = "CORRIDA COMPLETA!"; msg.innerText = `Ficaste em ${pos}º Lugar.`; dtl.innerText = "Sabedoria bíblica e reflexos rápidos levar-te-ão ao topo do pódio!";
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (gameState === 'playing') { updatePhysics(); updateObstacles(); updateParticles(); updateHUD(); }
+            else if (gameState === 'cinematic') {
+                cinematicProgress += 0.0035;
+                if (cinematicProgress >= 1.0) {
+                    cinematicProgress = 1.0; gameState = 'countdown'; countdownValue = 3; countdownTimer = Date.now();
+                    document.getElementById('countdown-overlay').classList.remove('hidden'); document.getElementById('countdown-text').innerText = "3"; playSound('jump');
+                }
+                if (platforms.length > 0) {
+                    const endZ = platforms[platforms.length - 1].mesh.position.z;
+                    const targetZ = endZ + (Math.abs(endZ) + 10) * (1-cinematicProgress);
+                    camera.position.set(2.5, 4.5, targetZ + 12); camera.lookAt(0, 1.2, targetZ - 5);
+                }
+            } 
+            else if (gameState === 'countdown') {
+                updateParticles();
+                if (Date.now() - countdownTimer >= 1000) {
+                    countdownValue--; countdownTimer = Date.now();
+                    if (countdownValue > 0) { document.getElementById('countdown-text').innerText = countdownValue; playSound('jump'); }
+                    else if (countdownValue === 0) { document.getElementById('countdown-text').innerText = "VAI!"; playSound('superjump'); }
+                    else { document.getElementById('countdown-overlay').classList.add('hidden'); document.getElementById('hud').classList.remove('hidden'); gameState = 'playing'; }
+                }
+                camera.position.set(0, 3.8, 17.5); camera.lookAt(0, 1.0, 7.0);
+            }
+            if (gameState === 'playing' && player.mesh) {
+                camera.position.x += (player.pos.x - camera.position.x) * 0.08;
+                camera.position.y += ((player.pos.y + 4.2) - camera.position.y) * 0.08;
+                camera.position.z += ((player.pos.z + 7.8) - camera.position.z) * 0.08;
+                camera.lookAt(player.pos.x, player.pos.y + 0.6, player.pos.z - 2.5);
+            } else if (gameState === 'menu') {
+                const t = Date.now() * 0.0003;
+                camera.position.set(Math.sin(t)*11, 5.5, 10 + Math.cos(t)*6); camera.lookAt(0, 1, 8);
+            }
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            const cont = document.getElementById('game-container');
+            const w = cont.clientWidth || window.innerWidth;
+            const h = cont.clientHeight || window.innerHeight;
+            camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h);
+        }
+    </script>
+</body>
+</html>
